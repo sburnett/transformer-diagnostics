@@ -11,6 +11,17 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
+func pipelineSummarize(dbRoot string, workers int) []transformer.PipelineStage {
+	flagset := flag.NewFlagSet("print", flag.ExitOnError)
+	storePath := flagset.String("leveldb", "", "Print the contents of this LevelDB")
+	flagset.Parse(flag.Args()[2:])
+	if len(*storePath) == 0 {
+		panic(fmt.Errorf("Invalid leveldb name. Must specify --leveldb."))
+	}
+	store := store.NewLevelDbStore(filepath.Join(dbRoot, *storePath))
+	return diagnostics.SummarizeStorePipeline(store)
+}
+
 func pipelinePrint(dbRoot string, workers int) []transformer.PipelineStage {
 	flagset := flag.NewFlagSet("print", flag.ExitOnError)
 	storePath := flagset.String("leveldb", "", "Print the contents of this LevelDB")
@@ -26,7 +37,8 @@ func pipelinePrint(dbRoot string, workers int) []transformer.PipelineStage {
 
 func main() {
 	pipelineFuncs := map[string]transformer.PipelineFunc{
-		"print": pipelinePrint,
+		"print":     pipelinePrint,
+		"summarize": pipelineSummarize,
 	}
 	name, pipeline := transformer.ParsePipelineChoice(pipelineFuncs)
 
