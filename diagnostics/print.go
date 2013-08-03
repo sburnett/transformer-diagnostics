@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -115,7 +115,7 @@ func parseKeyPrefix(keys []interface{}, keyPrefixString string) ([]byte, error) 
 		dereferencedValue := reflect.ValueOf(k).Elem().Interface()
 		keyPrefixDereferenced = append(keyPrefixDereferenced, dereferencedValue)
 	}
-	return key.EncodeOrDie(keyPrefixDereferenced...), nil
+	return lex.EncodeOrDie(keyPrefixDereferenced...), nil
 }
 
 func newRecordPrinter(keyFormat, valueFormat, keyPrefix string) (*recordPrinter, error) {
@@ -149,7 +149,7 @@ func newRecordPrinter(keyFormat, valueFormat, keyPrefix string) (*recordPrinter,
 func (printer *recordPrinter) Do(inputChan, outputChan chan *store.Record) {
 	for record := range inputChan {
 		if printer.keys != nil {
-			remainder := key.DecodeOrDie(record.Key, printer.keys...)
+			remainder := lex.DecodeOrDie(record.Key, printer.keys...)
 			printed := 0
 			for idx, k := range printer.keys {
 				if printer.keysIgnored[idx] {
@@ -170,7 +170,7 @@ func (printer *recordPrinter) Do(inputChan, outputChan chan *store.Record) {
 			fmt.Printf("%v: ", record.Key)
 		}
 		if printer.values != nil {
-			remainder := key.DecodeOrDie(record.Value, printer.values...)
+			remainder := lex.DecodeOrDie(record.Value, printer.values...)
 			printed := 0
 			for idx, value := range printer.values {
 				if printer.valuesIgnored[idx] {
