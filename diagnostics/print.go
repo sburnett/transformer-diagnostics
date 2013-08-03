@@ -10,24 +10,34 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func RecordPrinterPipeline(store store.Reader, keyFormat, valueFormat string) []transformer.PipelineStage {
-	printer, err := newRecordPrinter(keyFormat, valueFormat)
+func RecordPrinterPipeline(stor store.Seeker, keyFormat, valueFormat, keyPrefix string) []transformer.PipelineStage {
+	printer, err := newRecordPrinter(keyFormat, valueFormat, keyPrefix)
 	if err != nil {
 		panic(err)
 	}
+	keyPrefixStore := makeKeyPrefixStore(printer.keyPrefix)
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "Print",
-			Reader:      store,
+			Reader:      store.NewPrefixIncludingReader(stor, keyPrefixStore),
 			Transformer: printer,
 		},
 	}
+}
+
+func makeKeyPrefixStore(keyPrefix []byte) *store.SliceStore {
+	prefixStore := store.SliceStore{}
+	prefixStore.BeginWriting()
+	prefixStore.WriteRecord(&store.Record{Key: keyPrefix})
+	prefixStore.EndWriting()
+	return &prefixStore
 }
 
 type recordPrinter struct {
 	keys, values               []interface{}
 	keysIgnored, valuesIgnored []bool
 	keysRaw, valuesRaw         bool
+	keyPrefix                  []byte
 }
 
 func parsePrintFormatString(format string) ([]interface{}, []bool, bool, error) {
@@ -89,7 +99,26 @@ func parsePrintFormatString(format string) ([]interface{}, []bool, bool, error) 
 	return values, ignored, raw, nil
 }
 
-func newRecordPrinter(keyFormat, valueFormat string) (*recordPrinter, error) {
+func parseKeyPrefix(keys []interface{}, keyPrefixString string) ([]byte, error) {
+	if keyPrefixString == "" {
+		return nil, nil
+	}
+	valueStrings := strings.Split(keyPrefixString, ",")
+	numValues := len(valueStrings)
+	formatString := strings.TrimSuffix(strings.Repeat("%v,", numValues), ",")
+	keyPrefix := keys[:numValues]
+	if _, err := fmt.Sscanf(keyPrefixString, formatString, keyPrefix...); err != nil {
+		return nil, err
+	}
+	var keyPrefixDereferenced []interface{}
+	for _, k := range keyPrefix {
+		dereferencedValue := reflect.ValueOf(k).Elem().Interface()
+		keyPrefixDereferenced = append(keyPrefixDereferenced, dereferencedValue)
+	}
+	return key.EncodeOrDie(keyPrefixDereferenced...), nil
+}
+
+func newRecordPrinter(keyFormat, valueFormat, keyPrefix string) (*recordPrinter, error) {
 	var printer recordPrinter
 	if len(keyFormat) > 0 {
 		if keys, ignored, raw, err := parsePrintFormatString(keyFormat); err != nil {
@@ -99,6 +128,11 @@ func newRecordPrinter(keyFormat, valueFormat string) (*recordPrinter, error) {
 			printer.keysIgnored = ignored
 			printer.keysRaw = raw
 		}
+		prefix, err := parseKeyPrefix(printer.keys, keyPrefix)
+		if err != nil {
+			return nil, err
+		}
+		printer.keyPrefix = prefix
 	}
 	if len(valueFormat) > 0 {
 		if values, ignored, raw, err := parsePrintFormatString(valueFormat); err != nil {
