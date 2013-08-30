@@ -18,7 +18,7 @@ func main() {
 	valueFormat := flag.String("value_format", "", "Format values using this format string")
 	keyPrefix := flag.String("key_prefix", "", "Only print keys with this prefix")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s <leveldb path>:\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage of %s [options] <leveldb path>:\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
