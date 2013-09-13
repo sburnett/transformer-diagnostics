@@ -10,6 +10,14 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
+type RawFormat int
+
+const (
+	NoRaw RawFormat = iota
+	RawBytes
+	RawString
+)
+
 func RecordPrinterPipeline(stor store.Seeker, keyFormat, valueFormat, keyPrefix string) []transformer.PipelineStage {
 	printer, err := newRecordPrinter(keyFormat, valueFormat, keyPrefix)
 	if err != nil {
@@ -36,14 +44,11 @@ func makeKeyPrefixStore(keyPrefix []byte) *store.SliceStore {
 type recordPrinter struct {
 	keys, values               []interface{}
 	keysIgnored, valuesIgnored []bool
-	keysRaw, valuesRaw         bool
+	keysRaw, valuesRaw         RawFormat
 	keyPrefix                  []byte
 }
 
-func parsePrintFormatString(format string) ([]interface{}, []bool, bool, error) {
-	var values []interface{}
-	var ignored []bool
-	var raw bool
+func parsePrintFormatString(format string) (values []interface{}, ignored []bool, raw RawFormat, err error) {
 	for _, format := range strings.Split(format, ",") {
 		if format[0] == '-' {
 			ignored = append(ignored, true)
@@ -91,12 +96,14 @@ func parsePrintFormatString(format string) ([]interface{}, []bool, bool, error) 
 		case "[]int64":
 			values = append(values, new([]int64))
 		case "raw":
-			raw = true
+			raw = RawBytes
+		case "raw_string":
+			raw = RawString
 		default:
-			return nil, nil, false, fmt.Errorf("Invalid format specifier: %v", format)
+			err = fmt.Errorf("Invalid format specifier: %v", format)
 		}
 	}
-	return values, ignored, raw, nil
+	return
 }
 
 func parseKeyPrefix(keys []interface{}, keyPrefixString string) ([]byte, error) {
@@ -162,12 +169,23 @@ func (printer *recordPrinter) Do(inputChan, outputChan chan *store.Record) {
 				fmt.Print(v.Elem().Interface())
 				printed++
 			}
-			if len(remainder) > 0 && printer.keysRaw {
-				fmt.Printf(",%v", remainder)
+			if len(remainder) > 0 {
+				fmt.Print(",")
+				switch printer.keysRaw {
+				case RawBytes:
+					fmt.Print(remainder)
+				case RawString:
+					fmt.Print(string(remainder))
+				}
 			}
 			fmt.Printf(": ")
-		} else if printer.keysRaw {
-			fmt.Printf("%v: ", record.Key)
+		} else {
+			switch printer.keysRaw {
+			case RawBytes:
+				fmt.Printf("%v: ", record.Key)
+			case RawString:
+				fmt.Printf("%v: ", string(record.Key))
+			}
 		}
 		if printer.values != nil {
 			remainder := lex.DecodeOrDie(record.Value, printer.values...)
@@ -183,11 +201,22 @@ func (printer *recordPrinter) Do(inputChan, outputChan chan *store.Record) {
 				fmt.Print(v.Elem().Interface())
 				printed++
 			}
-			if len(remainder) > 0 && printer.valuesRaw {
-				fmt.Printf(",%v", remainder)
+			if len(remainder) > 0 {
+				fmt.Print(",")
+				switch printer.valuesRaw {
+				case RawBytes:
+					fmt.Print(remainder)
+				case RawString:
+					fmt.Print(string(remainder))
+				}
 			}
-		} else if printer.valuesRaw {
-			fmt.Printf("%v", record.Value)
+		} else {
+			switch printer.valuesRaw {
+			case RawBytes:
+				fmt.Print(record.Value)
+			case RawString:
+				fmt.Print(string(record.Value))
+			}
 		}
 		fmt.Printf("\n")
 	}
